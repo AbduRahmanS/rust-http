@@ -26,11 +26,12 @@ fn main() {
                     .split_whitespace()
                     .nth(1)
                     .unwrap_or("");
-                if request_target != '/'.to_string() {
+                if !request_target.starts_with("/echo") {
                     let response = "HTTP/1.1 404 Not Found\r\n\r\n";
                     _stream.write(response.as_bytes()).unwrap();
                 } else {
-                    let response = "HTTP/1.1 200 OK\r\n\r\nHello, world!";
+                    let echo = request_target.strip_prefix("/echo/").unwrap_or("");
+                    let response = format!("HTTP/1.1 200 OK\r\n\r\n{}", echo);
                     _stream.write(response.as_bytes()).unwrap();
                 }
             }
