@@ -27,7 +27,7 @@ fn main() {
                     .nth(1)
                     .unwrap_or("");
                 if request_target != '/'.to_string() {
-                    let response = "HTTP/1.1 404 NOT FOUND\r\n\r\n";
+                    let response = "HTTP/1.1 404 Not Found\r\n\r\n";
                     _stream.write(response.as_bytes()).unwrap();
                 } else {
                     let response = "HTTP/1.1 200 OK\r\n\r\nHello, world!";
