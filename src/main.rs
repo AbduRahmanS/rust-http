@@ -26,12 +26,16 @@ fn main() {
                     .split_whitespace()
                     .nth(1)
                     .unwrap_or("");
-                if !request_target.starts_with("/echo") {
-                    let response = "HTTP/1.1 404 Not Found\r\n\r\n";
+                if request_target == '/'.to_string() {
+                    let response = "HTTP/1.1 200 OK\r\n\r\n";
+                    _stream.write(response.as_bytes()).unwrap();
+                } else if request_target.starts_with("/echo") {
+                    let echo = request_target.strip_prefix("/echo/").unwrap_or("");
+                    let response =
+                        format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", echo.len(), echo);
                     _stream.write(response.as_bytes()).unwrap();
                 } else {
-                    let echo = request_target.strip_prefix("/echo/").unwrap_or("");
-                    let response = format!("HTTP/1.1 200 OK\r\n\r\n{}", echo);
+                    let response = "HTTP/1.1 404 Not Found\r\n\r\n";
                     _stream.write(response.as_bytes()).unwrap();
                 }
             }
