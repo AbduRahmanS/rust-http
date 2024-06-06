@@ -1,8 +1,9 @@
 // Uncomment this block to pass the first stage
 use std::{
-    fs::File,
+    fs::{self, File},
     io::{Read, Write},
     net::TcpListener,
+    path::Path,
     thread,
 };
 
@@ -65,21 +66,17 @@ fn handle_conn(mut _stream: std::net::TcpStream) {
         );
         _stream.write(res.as_bytes()).unwrap();
     } else if request_target.starts_with("/files") {
-        let path = format!(
-            "/tmp/{}",
-            request_target.strip_prefix("/files/").unwrap_or("")
-        );
-        let file = File::open(path);
-        match file {
-            Ok(mut file) => {
-                let mut buf = String::new();
-                file.read_to_string(&mut buf).unwrap();
-                let res = format!("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n{}", buf.len(), buf);
+        let file_name = request_target.replace("/files/", "");
+        let dir_path = Path::new("/tmp");
+        let content = read_file(&file_name, dir_path);
+
+        match content {
+            Some(c) => {
+                let res = format!("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n{}", c.len(), c);
                 _stream.write(res.as_bytes()).unwrap();
             }
-            Err(err) => {
-                println!("{}", err);
-                let response = "HTTP/1.1 404 Not Found\r\n\r\nOops";
+            None => {
+                let response = "HTTP/1.1 404 Not Found\r\n\r\n";
                 _stream.write(response.as_bytes()).unwrap();
             }
         }
@@ -87,4 +84,29 @@ fn handle_conn(mut _stream: std::net::TcpStream) {
         let response = "HTTP/1.1 404 Not Found\r\n\r\n";
         _stream.write(response.as_bytes()).unwrap();
     }
+}
+
+fn read_file(file_name: &str, dir_path: &Path) -> Option<String> {
+    let entries = fs::read_dir(dir_path).unwrap();
+    for entry in entries {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        if path.is_dir() {
+            if let Some(content) = read_file(file_name, &path) {
+                return Some(content);
+            }
+        } else if path
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains(file_name)
+        {
+            let mut file = File::open(path).unwrap();
+            let mut buf = String::new();
+            file.read_to_string(&mut buf).unwrap();
+            return Some(buf);
+        }
+    }
+    None
 }
