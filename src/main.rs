@@ -65,7 +65,10 @@ fn handle_conn(mut _stream: std::net::TcpStream) {
         );
         _stream.write(res.as_bytes()).unwrap();
     } else if request_target.starts_with("/files") {
-        let path = request_target.strip_prefix("/files/").unwrap_or("");
+        let path = format!(
+            "/tmp/{}",
+            request_target.strip_prefix("/files/").unwrap_or("")
+        );
         let file = File::open(path);
         match file {
             Ok(mut file) => {
