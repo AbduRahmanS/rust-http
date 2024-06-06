@@ -1,5 +1,6 @@
 // Uncomment this block to pass the first stage
 use std::{
+    fs::File,
     io::{Read, Write},
     net::TcpListener,
     thread,
@@ -37,7 +38,7 @@ fn handle_conn(mut _stream: std::net::TcpStream) {
         .split_whitespace()
         .nth(1)
         .unwrap_or("");
-    let headers = header.lines().skip(1).collect::<Vec<&str>>();
+    println!("Target : {}", request_target);
     if request_target == '/'.to_string() {
         let response = "HTTP/1.1 200 OK\r\n\r\n";
         _stream.write(response.as_bytes()).unwrap();
@@ -50,6 +51,7 @@ fn handle_conn(mut _stream: std::net::TcpStream) {
         );
         _stream.write(response.as_bytes()).unwrap();
     } else if request_target == "/user-agent".to_string() {
+        let headers = header.lines().skip(1).collect::<Vec<&str>>();
         let user_agent = headers
             .iter()
             .find(|&x| x.starts_with("User-Agent"))
@@ -62,6 +64,22 @@ fn handle_conn(mut _stream: std::net::TcpStream) {
             user_agent
         );
         _stream.write(res.as_bytes()).unwrap();
+    } else if request_target.starts_with("/files") {
+        let path = request_target.strip_prefix("/files/").unwrap_or("");
+        let file = File::open(path);
+        match file {
+            Ok(mut file) => {
+                let mut buf = String::new();
+                file.read_to_string(&mut buf).unwrap();
+                let res = format!("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n{}", buf.len(), buf);
+                _stream.write(res.as_bytes()).unwrap();
+            }
+            Err(err) => {
+                println!("{}", err);
+                let response = "HTTP/1.1 404 Not Found\r\n\r\nOops";
+                _stream.write(response.as_bytes()).unwrap();
+            }
+        }
     } else {
         let response = "HTTP/1.1 404 Not Found\r\n\r\n";
         _stream.write(response.as_bytes()).unwrap();
