@@ -26,6 +26,7 @@ fn main() {
                     .split_whitespace()
                     .nth(1)
                     .unwrap_or("");
+                let headers = header.lines().skip(1).collect::<Vec<&str>>();
                 if request_target == '/'.to_string() {
                     let response = "HTTP/1.1 200 OK\r\n\r\n";
                     _stream.write(response.as_bytes()).unwrap();
@@ -34,6 +35,15 @@ fn main() {
                     let response =
                         format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", echo.len(), echo);
                     _stream.write(response.as_bytes()).unwrap();
+                } else if request_target == "/user-agent".to_string() {
+                    let user_agent = headers
+                        .iter()
+                        .find(|&x| x.starts_with("User-Agent"))
+                        .unwrap_or(&"User-Agent: Unknown")
+                        .strip_prefix("User-Agent: ")
+                        .unwrap();
+                    let res = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", user_agent.len(), user_agent);
+                    _stream.write(res.as_bytes()).unwrap();
                 } else {
                     let response = "HTTP/1.1 404 Not Found\r\n\r\n";
                     _stream.write(response.as_bytes()).unwrap();
