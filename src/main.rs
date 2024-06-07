@@ -112,7 +112,7 @@ fn handle_post(stream: &mut TcpStream, request_target: &str, body: &str) {
     if request_target.starts_with("/files") {
         let file_name = request_target.replace("/files/", "");
         write_file(&file_name, body);
-        let response = "HTTP/1.1 201 CREATED\r\n\r\n";
+        let response = "HTTP/1.1 201 Created\r\n\r\n";
         stream.write(response.as_bytes()).unwrap();
     } else {
         let response = "HTTP/1.1 404 Not Found\r\n\r\n";
