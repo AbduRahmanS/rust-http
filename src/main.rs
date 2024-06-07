@@ -1,6 +1,7 @@
 // Uncomment this block to pass the first stage
 use std::{
-    fs::{self, File},
+    env::args,
+    fs::File,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
     path::Path,
@@ -31,6 +32,15 @@ fn handle_conn(mut _stream: TcpStream) {
     let mut buffer = [0; 1024];
     _stream.read(&mut buffer).unwrap();
 
+    let mut directory: Option<String> = None;
+    if args().len() > 1 {
+        if std::env::args().nth(1).expect("no pattern given") == "--directory" {
+            directory = Some(args().nth(2).expect("no pattern given"));
+        } else {
+            panic!()
+        }
+    }
+
     let req = std::str::from_utf8(&buffer).unwrap();
     let headers = req.lines().skip(1).collect::<Vec<&str>>();
 
@@ -53,8 +63,8 @@ fn handle_conn(mut _stream: TcpStream) {
     println!("Body: {}", body);
 
     match method {
-        "GET" => handle_get(&mut _stream, request_target, headers),
-        "POST" => handle_post(&mut _stream, request_target, body),
+        "GET" => handle_get(&mut _stream, request_target, headers, directory),
+        "POST" => handle_post(&mut _stream, request_target, body, directory),
         _ => {
             let response = "HTTP/1.1 405 Method Not Allowed\r\n\r\n";
             _stream.write(response.as_bytes()).unwrap();
@@ -62,7 +72,12 @@ fn handle_conn(mut _stream: TcpStream) {
     }
 }
 
-fn handle_get(stream: &mut TcpStream, request_target: &str, headers: Vec<&str>) {
+fn handle_get(
+    stream: &mut TcpStream,
+    request_target: &str,
+    headers: Vec<&str>,
+    directory: Option<String>,
+) {
     if request_target == '/'.to_string() {
         let response = "HTTP/1.1 200 OK\r\n\r\n";
         stream.write(response.as_bytes()).unwrap();
@@ -89,8 +104,7 @@ fn handle_get(stream: &mut TcpStream, request_target: &str, headers: Vec<&str>) 
         stream.write(res.as_bytes()).unwrap();
     } else if request_target.starts_with("/files") {
         let file_name = request_target.replace("/files/", "");
-        let dir_path = Path::new("/tmp");
-        let content = read_file(&file_name, dir_path);
+        let content = read_file(&file_name, &directory.unwrap());
 
         match content {
             Some(c) => {
@@ -108,10 +122,15 @@ fn handle_get(stream: &mut TcpStream, request_target: &str, headers: Vec<&str>) 
     }
 }
 
-fn handle_post(stream: &mut TcpStream, request_target: &str, body: &str) {
+fn handle_post(
+    stream: &mut TcpStream,
+    request_target: &str,
+    body: &str,
+    directory: Option<String>,
+) {
     if request_target.starts_with("/files") {
         let file_name = request_target.replace("/files/", "");
-        write_file(&file_name, body);
+        write_file(&file_name, body, &directory.unwrap());
         let response = "HTTP/1.1 201 Created\r\n\r\n";
         stream.write(response.as_bytes()).unwrap();
     } else {
@@ -119,33 +138,19 @@ fn handle_post(stream: &mut TcpStream, request_target: &str, body: &str) {
         stream.write(response.as_bytes()).unwrap();
     }
 }
-fn read_file(file_name: &str, dir_path: &Path) -> Option<String> {
-    let entries = fs::read_dir(dir_path).unwrap();
-    for entry in entries {
-        let entry = entry.unwrap();
-        let path = entry.path();
-        if path.is_dir() {
-            if let Some(content) = read_file(file_name, &path) {
-                return Some(content);
-            }
-        } else if path
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .contains(file_name)
-        {
-            let mut file = File::open(path).unwrap();
-            let mut buf = String::new();
-            file.read_to_string(&mut buf).unwrap();
-            return Some(buf);
-        }
+fn read_file(file_name: &str, dir_path: &String) -> Option<String> {
+    let path = Path::new(dir_path).join(file_name);
+    let mut file = File::open(path).unwrap();
+    let mut buf = String::new();
+    file.read_to_string(&mut buf).unwrap();
+    match buf {
+        s if s.is_empty() => None,
+        _ => Some(buf),
     }
-    None
 }
 
-fn write_file(file_name: &str, content: &str) {
-    let path = Path::new(file_name);
+fn write_file(file_name: &str, content: &str, directory: &String) {
+    let path = Path::new(directory).join(file_name);
     File::create(path)
         .unwrap()
         .write_all(content.as_bytes())
