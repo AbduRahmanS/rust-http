@@ -2,7 +2,7 @@
 use std::{
     fs::{self, File},
     io::{Read, Write},
-    net::TcpListener,
+    net::{TcpListener, TcpStream},
     path::Path,
     thread,
 };
@@ -27,22 +27,45 @@ fn main() {
     }
 }
 
-fn handle_conn(mut _stream: std::net::TcpStream) {
+fn handle_conn(mut _stream: TcpStream) {
     let mut buffer = [0; 1024];
     _stream.read(&mut buffer).unwrap();
 
-    let header = std::str::from_utf8(&buffer).unwrap();
-    let request_target = header
+    let req = std::str::from_utf8(&buffer).unwrap();
+    let headers = req.lines().skip(1).collect::<Vec<&str>>();
+
+    let method = req
+        .lines()
+        .next()
+        .unwrap()
+        .split_whitespace()
+        .next()
+        .unwrap();
+    let request_target = req
         .lines()
         .next()
         .unwrap_or("")
         .split_whitespace()
         .nth(1)
         .unwrap_or("");
-    println!("Target : {}", request_target);
+
+    let body = req.split("\r\n\r\n").nth(1).unwrap_or("");
+    println!("Body: {}", body);
+
+    match method {
+        "GET" => handle_get(&mut _stream, request_target, headers),
+        "POST" => handle_post(&mut _stream, request_target, body),
+        _ => {
+            let response = "HTTP/1.1 405 Method Not Allowed\r\n\r\n";
+            _stream.write(response.as_bytes()).unwrap();
+        }
+    }
+}
+
+fn handle_get(stream: &mut TcpStream, request_target: &str, headers: Vec<&str>) {
     if request_target == '/'.to_string() {
         let response = "HTTP/1.1 200 OK\r\n\r\n";
-        _stream.write(response.as_bytes()).unwrap();
+        stream.write(response.as_bytes()).unwrap();
     } else if request_target.starts_with("/echo") {
         let echo = request_target.strip_prefix("/echo/").unwrap_or("");
         let response = format!(
@@ -50,9 +73,8 @@ fn handle_conn(mut _stream: std::net::TcpStream) {
             echo.len(),
             echo
         );
-        _stream.write(response.as_bytes()).unwrap();
+        stream.write(response.as_bytes()).unwrap();
     } else if request_target == "/user-agent".to_string() {
-        let headers = header.lines().skip(1).collect::<Vec<&str>>();
         let user_agent = headers
             .iter()
             .find(|&x| x.starts_with("User-Agent"))
@@ -64,7 +86,7 @@ fn handle_conn(mut _stream: std::net::TcpStream) {
             user_agent.len(),
             user_agent
         );
-        _stream.write(res.as_bytes()).unwrap();
+        stream.write(res.as_bytes()).unwrap();
     } else if request_target.starts_with("/files") {
         let file_name = request_target.replace("/files/", "");
         let dir_path = Path::new("/tmp");
@@ -73,19 +95,30 @@ fn handle_conn(mut _stream: std::net::TcpStream) {
         match content {
             Some(c) => {
                 let res = format!("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n{}", c.len(), c);
-                _stream.write(res.as_bytes()).unwrap();
+                stream.write(res.as_bytes()).unwrap();
             }
             None => {
                 let response = "HTTP/1.1 404 Not Found\r\n\r\n";
-                _stream.write(response.as_bytes()).unwrap();
+                stream.write(response.as_bytes()).unwrap();
             }
         }
     } else {
         let response = "HTTP/1.1 404 Not Found\r\n\r\n";
-        _stream.write(response.as_bytes()).unwrap();
+        stream.write(response.as_bytes()).unwrap();
     }
 }
 
+fn handle_post(stream: &mut TcpStream, request_target: &str, body: &str) {
+    if request_target.starts_with("/files") {
+        let file_name = request_target.replace("/files/", "");
+        write_file(&file_name, body);
+        let response = "HTTP/1.1 201 OK\r\n\r\n";
+        stream.write(response.as_bytes()).unwrap();
+    } else {
+        let response = "HTTP/1.1 404 Not Found\r\n\r\n";
+        stream.write(response.as_bytes()).unwrap();
+    }
+}
 fn read_file(file_name: &str, dir_path: &Path) -> Option<String> {
     let entries = fs::read_dir(dir_path).unwrap();
     for entry in entries {
@@ -109,4 +142,12 @@ fn read_file(file_name: &str, dir_path: &Path) -> Option<String> {
         }
     }
     None
+}
+
+fn write_file(file_name: &str, content: &str) {
+    let path = Path::new(file_name);
+    File::create(path)
+        .unwrap()
+        .write_all(content.as_bytes())
+        .unwrap();
 }
