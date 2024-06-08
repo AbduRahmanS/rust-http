@@ -80,9 +80,22 @@ fn handle_get(
         let response = "HTTP/1.1 200 OK\r\n\r\n";
         stream.write(response.as_bytes()).unwrap();
     } else if request_target.starts_with("/echo") {
+        let accept_encoding = headers
+            .iter()
+            .find(|&x| x.to_lowercase().starts_with("accept-encoding"))
+            .unwrap_or(&"accept-ancoding:  ")
+            .to_lowercase();
+        let encoding = accept_encoding
+            .strip_prefix("accept-encoding: ")
+            .unwrap_or("");
         let echo = request_target.strip_prefix("/echo/").unwrap_or("");
         let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+            "HTTP/1.1 200 OK{}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+            if encoding == "gzip" {
+                format!("\r\nContent-Encoding: {}", encoding)
+            } else {
+                "".to_string()
+            },
             echo.len(),
             echo
         );
@@ -90,7 +103,7 @@ fn handle_get(
     } else if request_target == "/user-agent".to_string() {
         let user_agent = headers
             .iter()
-            .find(|&x| x.starts_with("User-Agent"))
+            .find(|&x| x.to_lowercase().starts_with("user-agent"))
             .unwrap_or(&"User-Agent: Unknown")
             .strip_prefix("User-Agent: ")
             .unwrap();
