@@ -91,8 +91,8 @@ fn handle_get(
         let echo = request_target.strip_prefix("/echo/").unwrap_or("");
         let response = format!(
             "HTTP/1.1 200 OK{}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
-            if encoding == "gzip" {
-                format!("\r\nContent-Encoding: {}", encoding)
+            if encoding.contains("gzip") {
+                "\r\nContent-Encoding: gzip".to_string()
             } else {
                 "".to_string()
             },
