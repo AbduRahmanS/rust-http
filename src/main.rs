@@ -9,11 +9,7 @@ use std::{
 };
 
 fn main() {
-    // You can use print statements as follows for debugging, they'll be visible when running tests.
-    println!("Logs from your program will appear here!");
-
-    // Uncomment this block to pass the first stage
-    //
+    println!("Server starting on port 4221");
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
 
     for stream in listener.incoming() {
@@ -29,8 +25,12 @@ fn main() {
 }
 
 fn handle_conn(mut _stream: TcpStream) {
-    let mut buffer = [0; 1024];
-    _stream.read(&mut buffer).unwrap();
+    let mut buffer = [0; 1024]; // A buffer with a fixed size
+    let bytes_read = _stream.read(&mut buffer).unwrap_or(0); // Read into the buffer, get the number of bytes read
+
+    // Convert only the part of the buffer that contains data to a String
+    let req = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
+    println!("-------Request------ \n {} \n---------------", req);
 
     let mut directory: Option<String> = None;
     if args().len() > 1 {
@@ -41,7 +41,6 @@ fn handle_conn(mut _stream: TcpStream) {
         }
     }
 
-    let req = std::str::from_utf8(&buffer).unwrap();
     let headers = req.lines().skip(1).collect::<Vec<&str>>();
 
     let method = req
@@ -59,8 +58,7 @@ fn handle_conn(mut _stream: TcpStream) {
         .nth(1)
         .unwrap_or("");
 
-    let body = req.split("\r\n\r\n").nth(1).unwrap_or("");
-    println!("Body: {}", body);
+    let body = req.split("\r\n\r\n").nth(1).unwrap_or("").to_string();
 
     match method {
         "GET" => handle_get(&mut _stream, request_target, headers, directory),
@@ -125,7 +123,7 @@ fn handle_get(
 fn handle_post(
     stream: &mut TcpStream,
     request_target: &str,
-    body: &str,
+    body: String,
     directory: Option<String>,
 ) {
     if request_target.starts_with("/files") {
@@ -140,19 +138,21 @@ fn handle_post(
 }
 fn read_file(file_name: &str, dir_path: &String) -> Option<String> {
     let path = Path::new(dir_path).join(file_name);
-    let mut file = File::open(path).unwrap();
-    let mut buf = String::new();
-    file.read_to_string(&mut buf).unwrap();
-    match buf {
-        s if s.is_empty() => None,
-        _ => Some(buf),
+    let file = File::open(path);
+    match file {
+        Err(_) => return None,
+        Ok(mut f) => {
+            let mut buf = String::new();
+            f.read_to_string(&mut buf).unwrap();
+            Some(buf)
+        }
     }
 }
 
-fn write_file(file_name: &str, content: &str, directory: &String) {
+fn write_file(file_name: &str, content: String, directory: &String) {
+    println!("Content: {:?}", content);
     let path = Path::new(directory).join(file_name);
-    File::create(path)
-        .unwrap()
-        .write_all(content.as_bytes())
-        .unwrap();
+    let mut file = File::create(path).unwrap();
+    file.write_all(content.as_bytes()).unwrap();
+    file.flush().unwrap();
 }
