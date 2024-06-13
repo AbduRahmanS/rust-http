@@ -1,5 +1,4 @@
 use flate2::{write::GzEncoder, Compression};
-use nom::AsBytes;
 use std::{
     env::args,
     fs::File,
