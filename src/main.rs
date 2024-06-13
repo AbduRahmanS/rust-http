@@ -1,4 +1,5 @@
-// Uncomment this block to pass the first stage
+use flate2::{write::GzEncoder, Compression};
+use nom::AsBytes;
 use std::{
     env::args,
     fs::File,
@@ -83,23 +84,29 @@ fn handle_get(
         let accept_encoding = headers
             .iter()
             .find(|&x| x.to_lowercase().starts_with("accept-encoding"))
-            .unwrap_or(&"accept-ancoding:  ")
+            .unwrap_or(&"accept-encoding:  ")
             .to_lowercase();
         let encoding = accept_encoding
             .strip_prefix("accept-encoding: ")
             .unwrap_or("");
         let echo = request_target.strip_prefix("/echo/").unwrap_or("");
-        let response = format!(
-            "HTTP/1.1 200 OK{}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
-            if encoding.contains("gzip") {
-                "\r\nContent-Encoding: gzip".to_string()
-            } else {
-                "".to_string()
-            },
-            echo.len(),
-            echo
-        );
-        stream.write(response.as_bytes()).unwrap();
+        let encoded = gzip_encode(echo).unwrap();
+        println!("-----------Encoded : {:?}", encoded);
+        if encoding.contains("gzip") {
+            let res = format!(
+                "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n",
+                encoded.len(),
+            );
+            stream.write_all(res.as_bytes()).unwrap();
+            stream.write_all(&encoded).unwrap();
+        } else {
+            let res = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                echo.len(),
+                echo
+            );
+            stream.write_all(res.as_bytes()).unwrap();
+        };
     } else if request_target == "/user-agent".to_string() {
         let user_agent = headers
             .iter()
@@ -141,7 +148,7 @@ fn handle_post(
 ) {
     if request_target.starts_with("/files") {
         let file_name = request_target.replace("/files/", "");
-        write_file(&file_name, body, &directory.unwrap());
+        write_file(&file_name, body, &directory.expect("Directory not set"));
         let response = "HTTP/1.1 201 Created\r\n\r\n";
         stream.write(response.as_bytes()).unwrap();
     } else {
@@ -149,6 +156,7 @@ fn handle_post(
         stream.write(response.as_bytes()).unwrap();
     }
 }
+
 fn read_file(file_name: &str, dir_path: &String) -> Option<String> {
     let path = Path::new(dir_path).join(file_name);
     let file = File::open(path);
@@ -168,4 +176,16 @@ fn write_file(file_name: &str, content: String, directory: &String) {
     let mut file = File::create(path).unwrap();
     file.write_all(content.as_bytes()).unwrap();
     file.flush().unwrap();
+}
+
+fn gzip_encode(input: &str) -> Result<Vec<u8>, std::io::Error> {
+    // let mut body_buf = vec![];
+    // body_buf.extend_from_slice(input.as_bytes());
+    // let mut encoder = GzEncoder::new(vec![], Compression::default());
+    // encoder.write_all(&body_buf)?;
+    // let compressed_buf = encoder.finish()?;
+    // Ok(compressed_buf)
+    let mut compbody = Vec::new();
+    GzEncoder::new(&mut compbody, Compression::default()).write_all(input.as_bytes())?;
+    Ok(compbody)
 }
