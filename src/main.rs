@@ -1,10 +1,9 @@
-use flate2::{write::GzEncoder, Compression};
+use rust_http::*;
 use std::{
     env::args,
-    fs::File,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
-    path::Path,
+    str::FromStr,
     thread,
 };
 
@@ -29,8 +28,8 @@ fn handle_conn(mut _stream: TcpStream) {
     let bytes_read = _stream.read(&mut buffer).unwrap_or(0); // Read into the buffer, get the number of bytes read
 
     // Convert only the part of the buffer that contains data to a String
-    let req = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
-    println!("-------Request------ \n {} \n---------------", req);
+    let req_string = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
+    let request = HttpRequest::from_str(&req_string).unwrap();
 
     let mut directory: Option<String> = None;
     if args().len() > 1 {
@@ -41,29 +40,20 @@ fn handle_conn(mut _stream: TcpStream) {
         }
     }
 
-    let headers = req.lines().skip(1).collect::<Vec<&str>>();
-
-    let method = req
-        .lines()
-        .next()
-        .unwrap()
-        .split_whitespace()
-        .next()
-        .unwrap();
-    let request_target = req
-        .lines()
-        .next()
-        .unwrap_or("")
-        .split_whitespace()
-        .nth(1)
-        .unwrap_or("");
-
-    let body = req.split("\r\n\r\n").nth(1).unwrap_or("").to_string();
-
-    match method {
-        "GET" => handle_get(&mut _stream, request_target, headers, directory),
-        "POST" => handle_post(&mut _stream, request_target, body, directory),
-        _ => {
+    match request.method {
+        Method::GET => handle_get(
+            &mut _stream,
+            &request.request_target,
+            &request.headers,
+            directory,
+        ),
+        Method::POST => handle_post(
+            &mut _stream,
+            &request.request_target,
+            request.body.unwrap(),
+            directory,
+        ),
+        Method::UNKOWN => {
             let response = "HTTP/1.1 405 Method Not Allowed\r\n\r\n";
             _stream.write(response.as_bytes()).unwrap();
         }
@@ -73,7 +63,7 @@ fn handle_conn(mut _stream: TcpStream) {
 fn handle_get(
     stream: &mut TcpStream,
     request_target: &str,
-    headers: Vec<&str>,
+    headers: &Vec<String>,
     directory: Option<String>,
 ) {
     if request_target == '/'.to_string() {
@@ -83,7 +73,7 @@ fn handle_get(
         let accept_encoding = headers
             .iter()
             .find(|&x| x.to_lowercase().starts_with("accept-encoding"))
-            .unwrap_or(&"accept-encoding:  ")
+            .unwrap_or(&"accept-encoding:  ".to_string())
             .to_lowercase();
         let encoding = accept_encoding
             .strip_prefix("accept-encoding: ")
@@ -110,7 +100,7 @@ fn handle_get(
         let user_agent = headers
             .iter()
             .find(|&x| x.to_lowercase().starts_with("user-agent"))
-            .unwrap_or(&"User-Agent: Unknown")
+            .unwrap()
             .strip_prefix("User-Agent: ")
             .unwrap();
         let res = format!(
@@ -154,37 +144,4 @@ fn handle_post(
         let response = "HTTP/1.1 404 Not Found\r\n\r\n";
         stream.write(response.as_bytes()).unwrap();
     }
-}
-
-fn read_file(file_name: &str, dir_path: &String) -> Option<String> {
-    let path = Path::new(dir_path).join(file_name);
-    let file = File::open(path);
-    match file {
-        Err(_) => return None,
-        Ok(mut f) => {
-            let mut buf = String::new();
-            f.read_to_string(&mut buf).unwrap();
-            Some(buf)
-        }
-    }
-}
-
-fn write_file(file_name: &str, content: String, directory: &String) {
-    println!("Content: {:?}", content);
-    let path = Path::new(directory).join(file_name);
-    let mut file = File::create(path).unwrap();
-    file.write_all(content.as_bytes()).unwrap();
-    file.flush().unwrap();
-}
-
-fn gzip_encode(input: &str) -> Result<Vec<u8>, std::io::Error> {
-    // let mut body_buf = vec![];
-    // body_buf.extend_from_slice(input.as_bytes());
-    // let mut encoder = GzEncoder::new(vec![], Compression::default());
-    // encoder.write_all(&body_buf)?;
-    // let compressed_buf = encoder.finish()?;
-    // Ok(compressed_buf)
-    let mut compbody = Vec::new();
-    GzEncoder::new(&mut compbody, Compression::default()).write_all(input.as_bytes())?;
-    Ok(compbody)
 }

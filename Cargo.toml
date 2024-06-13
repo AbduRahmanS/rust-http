@@ -6,9 +6,9 @@
 #
 # DON'T EDIT THIS!
 [package]
-name = "http-server-starter-rust"
+name = "rust-http"
 version = "0.1.0"
-authors = ["Codecrafters <hello@codecrafters.io>"]
+authors = ["AbduRahman <abdrahaman.dev@gmail.com"]
 edition = "2021"
 
 # DON'T EDIT THIS!
